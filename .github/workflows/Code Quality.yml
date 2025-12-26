@@ -1,0 +1,54 @@
+name: Code Quality Checks
+
+permissions:
+  security-events: write
+  actions: read
+  contents: read
+
+on:
+  push:
+    branches:
+      - master  # Only run when target is master
+    tags:
+      - '*'
+  pull_request:
+    types: [opened, synchronize, edited]
+
+jobs:
+
+  analysis:
+    name: Code Analysis
+    runs-on: ubuntu-latest
+    if: github.event_name != 'push' && 
+        github.event.pull_request.merged == false &&
+        github.event.pull_request.user.login != 'dashabot[bot]'
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    - uses: actions/setup-python@v6
+      with:
+        python-version: '3.14t'
+
+    - name: Install Requirements
+      run: |
+        pip install --upgrade .[test]
+
+    - name: Bandit Vulnerability Scan
+      run: |
+        bandit src -r -v -n 3 --severity-level=all
+
+    - name: Check Optimised Imports
+      run: |
+        isort --check-only src --profile black
+
+    - name: Check Black Formatting
+      run: |
+        black src/**/*py --check -t py311
+
+    - name: Lint Scan
+      run: |
+        pylint src/**/*py --py-version "3.11"
