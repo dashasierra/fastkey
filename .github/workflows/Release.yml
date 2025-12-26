@@ -1,0 +1,114 @@
+name: Release
+
+on:
+  pull_request:
+    types:
+      - closed  # Only run when a PR is merged
+
+jobs:
+  release_alignment:
+    name: Release
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    if: >
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.base.ref == 'master' &&
+      github.event.pull_request.user.login != 'dashabot[bot]' &&
+      !startsWith(github.event.pull_request.title, 'Auto') &&
+      !startsWith(github.event.pull_request.title, 'Doc')
+    steps:
+      - name: get-token
+        uses: actions/create-github-app-token@v2
+        id: app-token
+        with:
+          app-id: ${{ secrets.DASHABOT_APPID }}
+          private-key: ${{ secrets.DASHABOT_PK }}
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Increment Version
+        id: bump-tag
+        uses: anothrNick/github-tag-action@1.75.0
+        env:
+          WITH_V: false
+          DRY_RUN: true
+          DEFAULT_BUMP: patch
+          MAJOR_STRING_TOKEN: Major
+          MINOR_STRING_TOKEN: Minor
+          PATCH_STRING_TOKEN: Patch
+          NONE_STRING_TOKEN: Doc
+
+      - name: Get User ID
+        id: get-user-id
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: echo "userg-id=$(gh api "/apps/${{ steps.app-token.outputs.app-slug }}" --jq .id)" >> "$GITHUB_OUTPUT"
+
+      - name: Update Version Strings
+        id:
+          Create_Branch
+        env:
+          HEAD_TITLE: ${{ github.event.pull_request.head.ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          sudo rm -rf .git
+          git init
+          git config --global init.defaultBranch master
+          git config user.name '${{ steps.app-token.outputs.app-slug }}[bot]'
+          git config user.email '${{ steps.get-user-id.outputs.userg-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com'
+          git remote add origin https://x-access-token:${{ env.GH_TOKEN }}@github.com/${{ github.repository }}
+          git clean -fdx
+          BRANCH_NAME=gh-actions-$(uuidgen)
+          echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
+          git fetch origin master
+          git checkout -b $BRANCH_NAME origin/master
+          sed -i "s/^version = .*/version = \"${{ steps.bump-tag.outputs.new_tag }}\"/" pyproject.toml
+          sed -i "s/^__version__ = .*/__version__ = \"${{ steps.bump-tag.outputs.new_tag }}\"/" src/__init__.py
+          git add pyproject.toml src/__init__.py
+          git commit --allow-empty -m "Bumping to ${{ steps.bump-tag.outputs.new_tag }}"
+          git push --set-upstream origin $BRANCH_NAME
+
+      - name: Create a pull request
+        id: create-pr
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          NEW_TAG: ${{ steps.bump-tag.outputs.new_tag }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          gh pr create --title "Auto Version Bump to ${{ env.NEW_TAG }}" \
+                       --body "Auto Version Update" \
+                       --base master --head ${{ env.BRANCH_NAME }}
+          PR_NUMBER=$(gh pr list --state open --base master --head ${{ env.BRANCH_NAME }} --json number --jq '.[0].number')
+          echo "PR_NUMBER=$PR_NUMBER" >> $GITHUB_ENV
+
+      - name: Merge the pull request
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          NEW_TAG: ${{ steps.bump-tag.outputs.new_tag }}
+        run: |
+          gh pr merge ${{ env.PR_NUMBER }} --merge --admin --body "Automated release ${{ env.NEW_TAG }}"
+
+      - name: Checkout for Tag
+        uses: actions/checkout@v4
+        with:
+          ref: master
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14t'
+
+      - name: Create Release
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          python -m pip install --upgrade pip setuptools wheel build
+          python -m build --wheel
+          gh release create "${{ steps.bump-tag.outputs.new_tag }}" \
+            --repo="${{ github.repository }}" \
+            --title="fastkey ${{ steps.bump-tag.outputs.new_tag }}" \
+            --generate-notes \
+            dist/*whl
