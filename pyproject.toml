@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fastkey"
+version = "0.0.1"
+authors = [
+    {name="Dasha Sierra", email="pypi@dashasierra.com"},
+]
+description = "PassKey Implementation in Python"
+readme = "README.md"
+requires-python = ">= 3.11"
+classifiers = [
+    'Development Status :: 2 - Pre-Alpha',
+    'Environment :: Web Environment',
+    'Framework :: FastAPI',
+    'Intended Audience :: Developers',
+    'Natural Language :: English',
+    'Operating System :: OS Independent',
+    'Programming Language :: Python :: 3',
+    'Programming Language :: JavaScript',
+    'Topic :: Internet :: WWW/HTTP',
+    'Topic :: Security',
+    'Topic :: Software Development :: Libraries :: Python Modules'
+]
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+dependencies = [
+    "cryptography>=46.0.3,<47.0",
+    "fastapi>=0.121.2,<1.0",
+    "PyJWT>=2.10.1,<3.0",
+    'sqlalchemy>=2.0.45,<3.0',
+    "webauthn>=2.7.0,<3.0"
+]
+
+[project.urls]
+Homepage = "https://github.com/dashasierra/fastkey"
+Issues = "https://github.com/dashasierra/fastkey/issues"
+
+[project.optional-dependencies]
+# Code Quality Controls
+test = [
+    "bandit",
+    "black",
+    "isort",
+    "pytest",
+    "pylint",
+    ]
+sample = [
+    "uvicorn"
+]
+# Release Management
+cicd = [
+    "build",
+]
